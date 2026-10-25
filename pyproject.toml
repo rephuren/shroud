@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
 authors = [{ name = "misxnthropy" }]
-dependencies = ["pillow>=10", "numpy>=1.26"]
+dependencies = ["pillow>=12.3.0", "numpy>=1.26"]
 
 [project.optional-dependencies]
 dev = ["pytest", "ruff", "mypy"]
