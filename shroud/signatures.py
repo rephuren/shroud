@@ -3,7 +3,7 @@ import math
 import re
 from collections import Counter
 
-from .findings import ALERT, INFO, WARN, Finding
+from .findings import ALERT, WARN, Finding
 
 SIGNATURES = [
     (b"PK\x03\x04", "ZIP-архив"),
@@ -48,7 +48,7 @@ def find_signatures(data: bytes, base_offset=0):
 
 def analyze_trailing(data: bytes, offset: int, where: str):
     """Данные, дописанные после логического конца файла."""
-    findings = []
+    findings: list[Finding] = []
     if not data:
         return findings
     h = entropy(data)

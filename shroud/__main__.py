@@ -3,7 +3,7 @@ import json
 import sys
 from pathlib import Path
 
-from . import scan
+from . import htmlreport, scan
 
 IMAGE_EXT = {".png", ".jpg", ".jpeg", ".gif", ".bmp"}
 RED, DIM, BOLD, RESET = "\033[38;2;179;0;15m", "\033[2m", "\033[1m", "\033[0m"
@@ -30,7 +30,10 @@ def spark(profile):
 
 
 def render(report, color):
-    c = (lambda code, s: f"{code}{s}{RESET}" if color and code else s)
+
+    def c(code, s):
+        return f"{code}{s}{RESET}" if color and code else s
+
     out = [c(BOLD, report.path) + c(DIM, f"  ({report.fmt or '?'}, {report.size} байт)")]
     for f in report.findings:
         mark, code = LEVEL_MARK[f.level]
@@ -41,17 +44,18 @@ def render(report, color):
     return "\n".join(out)
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(prog="shroud", description="Детектор стеганографии в изображениях")
     sub = parser.add_subparsers(dest="mode", required=True)
     sc = sub.add_parser("scan", help="проверить файлы или папки")
     sc.add_argument("paths", nargs="+")
     sc.add_argument("--json", action="store_true", help="вывод в JSON")
+    sc.add_argument("--html", metavar="ФАЙЛ", help="сохранить отчёт в HTML")
     sc.add_argument("--no-color", action="store_true")
     pl = sub.add_parser("lsb-plane", help="сохранить плоскость младших битов как картинку")
     pl.add_argument("path")
     pl.add_argument("out")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     if args.mode == "lsb-plane":
         scan.lsb_plane_image(Path(args.path).read_bytes()).save(args.out)
@@ -64,6 +68,9 @@ def main():
             reports.append(scan.scan_path(path))
         except OSError as e:
             print(f"{path}: {e}", file=sys.stderr)
+    if args.html:
+        Path(args.html).write_text(htmlreport.render(reports), encoding="utf-8")
+        print(f"HTML-отчёт сохранён: {args.html}", file=sys.stderr)
     if args.json:
         json.dump([r.as_dict() for r in reports], sys.stdout, ensure_ascii=False, indent=2)
         print()
@@ -74,4 +81,5 @@ def main():
     return 1 if flagged else 0
 
 
-sys.exit(main())
+if __name__ == "__main__":
+    sys.exit(main())

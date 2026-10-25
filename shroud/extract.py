@@ -22,7 +22,7 @@ def looks_like_text(run: bytes) -> bool:
 
 
 def _selections(nchan):
-    base = [(i,) for i in range(nchan)]
+    base: list[tuple[int, ...]] = [(i,) for i in range(nchan)]
     if nchan >= 3:
         base += [(0, 1, 2), (2, 1, 0)]
     if nchan == 4:

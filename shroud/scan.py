@@ -12,6 +12,8 @@ from .findings import ALERT, INFO, WARN, Finding
 
 LOSSLESS = {"png", "bmp"}
 RS_ALERT, RS_WARN, RS_SATURATED = 0.05, 0.04, 0.9
+MAX_FILE_BYTES = 256 * 1024 * 1024
+MAX_PIXELS = 100_000_000
 CHI_REST_MEDIAN = 4.0
 CHI_LEAD_MAX = 1.5
 CLEAN, ODD, SUSPICIOUS, LIKELY = "clean", "odd", "suspicious", "likely"
@@ -54,7 +56,14 @@ def _channels(img: Image.Image):
 def _pixel_analysis(data: bytes, fmt: str, report: Report):
     try:
         img = Image.open(io.BytesIO(data))
+        if img.width * img.height > MAX_PIXELS:
+            report.findings.append(Finding(INFO, "too-large",
+                                           f"изображение {img.width}x{img.height}: пиксельный анализ пропущен (лимит {MAX_PIXELS // 1_000_000} Мпикс)"))
+            return
         img.load()
+    except Image.DecompressionBombError:
+        report.findings.append(Finding(INFO, "too-large", "изображение объявляет слишком большие размеры: пиксельный анализ пропущен"))
+        return
     except Exception as e:
         report.findings.append(Finding(WARN, "decode-failed", f"изображение не декодируется: {e.__class__.__name__}"))
         return
@@ -64,7 +73,7 @@ def _pixel_analysis(data: bytes, fmt: str, report: Report):
                                        f"режим {names}: пиксельный LSB-анализ не применяется (палитра/другие режимы)"))
         return
     rs_values = {}
-    for name, ch in zip(names, chans):
+    for name, ch in zip(names, chans, strict=True):
         r = lsb.rs_estimate(ch)
         if r is not None:
             rs_values[name] = round(r[0], 3)
@@ -136,6 +145,11 @@ def scan_bytes(data: bytes, name="<memory>") -> Report:
 
 def scan_path(path) -> Report:
     p = Path(path)
+    size = p.stat().st_size
+    if size > MAX_FILE_BYTES:
+        report = Report(path=str(p), size=size, fmt=None)
+        report.findings.append(Finding(INFO, "too-large", f"файл {size} байт: больше лимита {MAX_FILE_BYTES // 1024 // 1024} МБ, пропущен"))
+        return report
     return scan_bytes(p.read_bytes(), str(p))
 
 

@@ -150,7 +150,7 @@ def _skip_subblocks(data, pos):
 
 
 def parse_gif(data: bytes):
-    findings = []
+    findings: list[Finding] = []
     if len(data) < 13:
         return findings
     flags = data[10]
