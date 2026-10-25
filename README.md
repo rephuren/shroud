@@ -70,3 +70,7 @@ assets/demo-stego.png  (png, 54462 байт)
 - DCT-анализ для JPEG (chi-square по коэффициентам)
 - анализ индексов палитры для GIF и PNG-P
 - плоскости других битов и пакетный отчёт в HTML
+
+## Лицензия
+
+MIT, см. [LICENSE](LICENSE).
