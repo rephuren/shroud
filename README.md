@@ -25,6 +25,7 @@ python3 -m venv .venv && .venv/bin/pip install .
 .venv/bin/shroud scan photo.png                       # файл
 .venv/bin/shroud scan ./folder --json                 # папка, вывод в JSON
 .venv/bin/shroud scan ./folder --html report.html     # самодостаточный HTML-отчёт
+.venv/bin/shroud scan ./folder --html r.html --html-sort name   # порядок: verdict | name | size
 .venv/bin/shroud lsb-plane photo.png out.png          # плоскость младших битов как картинка
 ```
 
