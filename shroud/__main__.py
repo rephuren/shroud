@@ -51,6 +51,7 @@ def main(argv=None):
     sc.add_argument("paths", nargs="+")
     sc.add_argument("--json", action="store_true", help="вывод в JSON")
     sc.add_argument("--html", metavar="ФАЙЛ", help="сохранить отчёт в HTML")
+    sc.add_argument("--html-sort", choices=htmlreport.SORTS, default="verdict", help="порядок карточек в HTML: verdict (по умолчанию), name, size")
     sc.add_argument("--no-color", action="store_true")
     pl = sub.add_parser("lsb-plane", help="сохранить плоскость младших битов как картинку")
     pl.add_argument("path")
@@ -69,7 +70,7 @@ def main(argv=None):
         except OSError as e:
             print(f"{path}: {e}", file=sys.stderr)
     if args.html:
-        Path(args.html).write_text(htmlreport.render(reports), encoding="utf-8")
+        Path(args.html).write_text(htmlreport.render(reports, args.html_sort), encoding="utf-8")
         print(f"HTML-отчёт сохранён: {args.html}", file=sys.stderr)
     if args.json:
         json.dump([r.as_dict() for r in reports], sys.stdout, ensure_ascii=False, indent=2)
