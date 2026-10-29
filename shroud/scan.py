@@ -6,11 +6,11 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
-from . import extract, lsb
+from . import extract, lsb, palette
 from .containers import analyze_container
 from .findings import ALERT, INFO, WARN, Finding
 
-LOSSLESS = {"png", "bmp"}
+LOSSLESS = {"png", "bmp", "gif"}
 RS_ALERT, RS_WARN, RS_SATURATED = 0.05, 0.04, 0.9
 MAX_FILE_BYTES = 256 * 1024 * 1024
 MAX_PIXELS = 100_000_000
@@ -67,6 +67,9 @@ def _pixel_analysis(data: bytes, fmt: str, report: Report):
     except Exception as e:
         report.findings.append(Finding(WARN, "decode-failed", f"изображение не декодируется: {e.__class__.__name__}"))
         return
+    if img.mode in ("P", "PA"):
+        _palette_analysis(img, report)
+        return
     chans, names = _channels(img)
     if chans is None:
         report.findings.append(Finding(INFO, "pixels-skipped",
@@ -106,6 +109,48 @@ def _pixel_analysis(data: bytes, fmt: str, report: Report):
                                        f"(оценка размера скрытых данных до ~{payload} байт)"))
 
 
+def _palette_analysis(img: Image.Image, report: Report):
+    """Индексы палитры: RS-анализ и хи-квадрат по парам индексов (2k, 2k+1) для сырых индексов и для рангов по яркости.
+    Первый кадр анимированного GIF считается как есть."""
+    if img.mode == "PA":
+        img = img.convert("P")
+    views = palette.views(img)
+    if not views:
+        report.findings.append(Finding(INFO, "palette-few-colors",
+                                       f"палитра: используется меньше {palette.MIN_USED} цветов, анализ индексов не применяется"))
+        return
+    names = {"I": "индексы как в файле", "O": "индексы по яркости цвета"}
+    rs_values, profiles = {}, {}
+    for key, arr in views:
+        r = lsb.rs_estimate(arr)
+        if r is not None:
+            rs_values[key] = round(r[0], 3)
+        profiles[key] = lsb.chi_square_profile([arr])
+    report.metrics["palette"] = {"colors": palette.used_colors(views[0][1]), "rs": rs_values,
+                                 "chi_profile": {k: [None if v is None else round(v, 2) for v in prof] for k, prof in profiles.items()}}
+    report.metrics["pixels"] = int(views[0][1].size)
+    if rs_values:
+        key, top = max(rs_values.items(), key=lambda kv: kv[1])  # встраивание бывает в одном из порядков, берём сильнейший сигнал
+        detail = ", ".join(f"{names[k]} {v:.2f}" for k, v in rs_values.items())
+        if top >= RS_ALERT:
+            report.findings.append(Finding(ALERT, "palette-rs", f"RS-анализ индексов палитры: заполнено примерно {top * 100:.0f}% LSB ({detail})"))
+        elif top >= RS_WARN:
+            report.findings.append(Finding(WARN, "palette-rs-weak", f"RS-анализ индексов палитры: слабый сигнал ({detail})"))
+    for key, prof in profiles.items():
+        suspicious, lead = _chi_contrast(prof)
+        if suspicious:
+            payload = int(report.metrics["pixels"] * lead / lsb.CHI_PARTS / 8)
+            report.findings.append(Finding(ALERT, "palette-chi",
+                                           f"хи-квадрат по парам индексов ({names[key]}): первые {lead} из {lsb.CHI_PARTS} долей похожи на случайные LSB, "
+                                           f"дальше структура (до ~{payload} байт)"))
+        elif sum(v is not None for v in prof) >= lsb.parts_needed() and all(v is not None and v <= CHI_LEAD_MAX for v in prof):
+            report.findings.append(Finding(ALERT, "palette-chi-flat",
+                                           f"хи-квадрат по парам индексов ({names[key]}): все доли выровнены, как после полного заполнения LSB"))
+    for key, arr in views:
+        for label, kind, preview in extract.candidates([arr])[:2]:
+            report.findings.append(Finding(ALERT, "palette-extract", f"из младших битов индексов ({names[key]}, {label}) читается {kind}: «{preview}»"))
+
+
 def _chi_contrast(profile):
     lead = 0
     for v in profile:
@@ -137,8 +182,6 @@ def scan_bytes(data: bytes, name="<memory>") -> Report:
     elif fmt == "jpeg":
         report.findings.append(Finding(INFO, "jpeg-dct",
                                        "JPEG: пиксельный LSB-анализ не применяется; DCT-стего (jsteg, outguess, F5) в v1 не проверяется"))
-    elif fmt == "gif":
-        report.findings.append(Finding(INFO, "gif-palette", "GIF: анализ индексов палитры в v1 не выполняется"))
     report.verdict = _verdict(report.findings)
     return report
 
@@ -157,6 +200,10 @@ def lsb_plane_image(data: bytes) -> Image.Image:
     img = Image.open(io.BytesIO(data))
     img.load()
     chans, _ = _channels(img)
+    if chans is None and img.mode in ("P", "PA"):
+        views = palette.views(img.convert("P") if img.mode == "PA" else img)
+        if views:
+            chans = [views[0][1]]
     if chans is None:
         raise ValueError("для этого режима изображения плоскость LSB не строится")
     plane = np.stack([lsb.lsb_plane(c) for c in chans[:3]], axis=-1) if len(chans) >= 3 else lsb.lsb_plane(chans[0])
