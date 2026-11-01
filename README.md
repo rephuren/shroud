@@ -26,6 +26,7 @@ python3 -m venv .venv && .venv/bin/pip install .
 .venv/bin/shroud scan ./folder --json                 # папка, вывод в JSON
 .venv/bin/shroud scan ./folder --html report.html     # самодостаточный HTML-отчёт
 .venv/bin/shroud scan ./folder --html r.html --html-sort name   # порядок: verdict | name | size
+.venv/bin/shroud scan ./folder --sarif shroud.sarif   # SARIF 2.1.0 для GitHub code scanning (только warn и alert)
 .venv/bin/shroud lsb-plane photo.png out.png          # плоскость младших битов как картинка
 ```
 
