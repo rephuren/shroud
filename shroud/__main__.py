@@ -3,7 +3,7 @@ import json
 import sys
 from pathlib import Path
 
-from . import htmlreport, scan
+from . import htmlreport, sarif, scan
 
 IMAGE_EXT = {".png", ".jpg", ".jpeg", ".gif", ".bmp"}
 RED, DIM, BOLD, RESET = "\033[38;2;179;0;15m", "\033[2m", "\033[1m", "\033[0m"
@@ -52,6 +52,7 @@ def main(argv=None):
     sc.add_argument("--json", action="store_true", help="вывод в JSON")
     sc.add_argument("--html", metavar="ФАЙЛ", help="сохранить отчёт в HTML")
     sc.add_argument("--html-sort", choices=htmlreport.SORTS, default="verdict", help="порядок карточек в HTML: verdict (по умолчанию), name, size")
+    sc.add_argument("--sarif", metavar="ФАЙЛ", help="сохранить отчёт в SARIF 2.1.0 (GitHub code scanning)")
     sc.add_argument("--no-color", action="store_true")
     pl = sub.add_parser("lsb-plane", help="сохранить плоскость младших битов как картинку")
     pl.add_argument("path")
@@ -72,6 +73,9 @@ def main(argv=None):
     if args.html:
         Path(args.html).write_text(htmlreport.render(reports, args.html_sort), encoding="utf-8")
         print(f"HTML-отчёт сохранён: {args.html}", file=sys.stderr)
+    if args.sarif:
+        Path(args.sarif).write_text(sarif.render(reports), encoding="utf-8")
+        print(f"SARIF-отчёт сохранён: {args.sarif}", file=sys.stderr)
     if args.json:
         json.dump([r.as_dict() for r in reports], sys.stdout, ensure_ascii=False, indent=2)
         print()
