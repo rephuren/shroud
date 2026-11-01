@@ -6,7 +6,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
-from . import extract, lsb, palette
+from . import extract, jpegdct, lsb, palette
 from .containers import analyze_container
 from .findings import ALERT, INFO, WARN, Finding
 
@@ -164,6 +164,34 @@ def _chi_contrast(profile):
     return False, lead
 
 
+def _jpeg_analysis(data: bytes, report: Report):
+    """Хи-квадрат по парам значений AC-коэффициентов (jsteg). F5 и OutGuess так не ловятся."""
+    try:
+        dec = jpegdct.decode(data)
+    except jpegdct.JpegUnsupported as e:
+        report.findings.append(Finding(INFO, "jpeg-dct", f"JPEG: DCT-анализ не применяется ({e})"))
+        return
+    except jpegdct.JpegError:
+        report.findings.append(Finding(WARN, "decode-failed", "JPEG не разбирается до коэффициентов: DCT-анализ пропущен"))
+        return
+    profile = jpegdct.chi_profile(dec)
+    if all(p is None for p in profile):
+        report.findings.append(Finding(INFO, "jpeg-dct", "JPEG: коэффициентов слишком мало для DCT-анализа"))
+        return
+    kind, parts = jpegdct.classify(profile)
+    bars = "".join(" " if p is None else "▁▂▃▄▅▆▇█"[min(7, int(p[0] / 2))] for p in profile)
+    note = " (проанализирована только часть блоков)" if dec.partial else ""
+    if kind == "flat":
+        text = f"DCT: пары значений AC-коэффициентов выровнены почти везде ({parts} долей из 10), как после jsteg"
+        report.findings.append(Finding(ALERT, "jpeg-dct-chi", f"{text}; профиль {bars}{note}"))
+    elif kind == "prefix":
+        text = f"DCT: пары выровнены только в первых {parts} долях из 10, дальше гистограмма нетронутая, как при частичном jsteg"
+        report.findings.append(Finding(ALERT, "jpeg-dct-chi", f"{text}; профиль {bars}{note}"))
+    else:
+        text = f"DCT: хи-квадрат по парам коэффициентов ничего не показал (профиль {bars}); F5 и OutGuess так не видны"
+        report.findings.append(Finding(INFO, "jpeg-dct", text))
+
+
 def _verdict(findings):
     alerts = [f for f in findings if f.level == ALERT]
     warns = [f for f in findings if f.level == WARN]
@@ -180,8 +208,7 @@ def scan_bytes(data: bytes, name="<memory>") -> Report:
     if fmt in LOSSLESS:
         _pixel_analysis(data, fmt, report)
     elif fmt == "jpeg":
-        report.findings.append(Finding(INFO, "jpeg-dct",
-                                       "JPEG: пиксельный LSB-анализ не применяется; DCT-стего (jsteg, outguess, F5) в v1 не проверяется"))
+        _jpeg_analysis(data, report)
     report.verdict = _verdict(report.findings)
     return report
 
