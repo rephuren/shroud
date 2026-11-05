@@ -53,6 +53,7 @@ def main(argv=None):
     sc.add_argument("--html", metavar="ФАЙЛ", help="сохранить отчёт в HTML")
     sc.add_argument("--html-sort", choices=htmlreport.SORTS, default="verdict", help="порядок карточек в HTML: verdict (по умолчанию), name, size")
     sc.add_argument("--sarif", metavar="ФАЙЛ", help="сохранить отчёт в SARIF 2.1.0 (GitHub code scanning)")
+    sc.add_argument("--only-flagged", action="store_true", help="показывать (и сохранять в json, html, sarif) только файлы с вердиктом suspicious или likely")
     sc.add_argument("--no-color", action="store_true")
     pl = sub.add_parser("lsb-plane", help="сохранить плоскость младших битов как картинку")
     pl.add_argument("path")
@@ -70,6 +71,11 @@ def main(argv=None):
             reports.append(scan.scan_path(path))
         except OSError as e:
             print(f"{path}: {e}", file=sys.stderr)
+    flagged = any(r.verdict in (scan.SUSPICIOUS, scan.LIKELY) for r in reports)
+    if args.only_flagged:
+        total = len(reports)
+        reports = [r for r in reports if r.verdict in (scan.SUSPICIOUS, scan.LIKELY)]
+        print(f"проверено файлов: {total}, показано: {len(reports)}", file=sys.stderr)
     if args.html:
         Path(args.html).write_text(htmlreport.render(reports, args.html_sort), encoding="utf-8")
         print(f"HTML-отчёт сохранён: {args.html}", file=sys.stderr)
@@ -82,7 +88,6 @@ def main(argv=None):
     else:
         color = sys.stdout.isatty() and not args.no_color
         print("\n\n".join(render(r, color) for r in reports))
-    flagged = any(r.verdict in (scan.SUSPICIOUS, scan.LIKELY) for r in reports)
     return 1 if flagged else 0
 
 
